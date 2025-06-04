@@ -1,0 +1,9 @@
+@echo off
+
+set DOCKER_BUILDKIT=1
+echo 🛑 Остановка контейнеров...
+docker-compose down
+echo 🔨 Сборка с кэшированием...
+docker-compose build --no-cache
+echo 🚀 Запуск приложения...
+docker-compose up
