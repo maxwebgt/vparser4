@@ -2,52 +2,203 @@ import { chromium } from 'playwright';
 
 console.log('🛒 ЭФФЕКТИВНЫЙ ПАРСЕР НАЛИЧИЯ: Playwright версия с РАБОЧИМИ ПРОКСИ\n');
 
-// 🌐 Глобальные переменные для управления прокси
+// 🌐 Система управления прокси
 let botProtectionHits = 0;
-let shouldUseProxy = false;
+let currentProxyIndex = -1; // -1 означает без прокси
+let proxyFailures = new Map(); // Счетчик неудач для каждого прокси
+let proxyList = []; // Реальные прокси из WebShare API
+
+console.log(`ℹ️ [INFO] 🔧 Инициализируем прокси хендлер...`);
+
+// РЕАЛЬНАЯ загрузка прокси из WebShare API
+const fetchProxies = async () => {
+  const WEBSHARE_API_KEY = 'qf8q4w-s8r6rk-h6y8yd-6kq5k6-6xb9pkf'; // Ваш ключ из логов
+  
+  console.log(`🌐 [PROXY] Initializing proxy handler...`);
+  console.log(`🌐 [PROXY] Fetching proxies from WebShare.io...`);
+  console.log(`🌐 [PROXY] Using WebShare API key: ${WEBSHARE_API_KEY.substring(0, 4)}...${WEBSHARE_API_KEY.slice(-4)}`);
+  
+  try {
+    const response = await fetch('https://proxy.webshare.io/api/v2/proxy/list/', {
+      headers: {
+        'Authorization': `Token ${WEBSHARE_API_KEY}`
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`WebShare API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    if (data.results && data.results.length > 0) {
+      proxyList = data.results.map(proxy => ({
+        host: proxy.proxy_address,
+        port: proxy.port,
+        username: proxy.username,
+        password: proxy.password,
+        country: getCountryFlag(proxy.country_code)
+      }));
+      
+      console.log(`🌐 [PROXY] Successfully fetched ${proxyList.length} valid proxies from Webshare.io`);
+      console.log(`PROXY FETCH COMPLETED SUCCESSFULLY: Found ${proxyList.length} valid proxies`);
+      console.log(`🌐 [PROXY] Successfully initialized proxy handler with ${proxyList.length} proxies`);
+      return true;
+    } else {
+      throw new Error('No proxies returned from WebShare API');
+    }
+  } catch (error) {
+    console.log(`❌ [ERROR] Failed to fetch proxies: ${error.message}`);
+    console.log(`🔄 [FALLBACK] Using without proxies...`);
+    return false;
+  }
+};
+
+const getCountryFlag = (countryCode) => {
+  const flags = {
+    'US': '🇺🇸', 'GB': '🇬🇧', 'DE': '🇩🇪', 'FR': '🇫🇷', 'JP': '🇯🇵',
+    'CA': '🇨🇦', 'AU': '🇦🇺', 'NL': '🇳🇱', 'SE': '🇸🇪', 'NO': '🇳🇴'
+  };
+  return flags[countryCode] || '🌍';
+};
+
+const getNextProxy = () => {
+  if (proxyList.length === 0) {
+    console.log('❌ [ERROR] 🚫 Нет доступных прокси!');
+    return null;
+  }
+  
+  console.log('🔍 [DEBUG] Getting next working proxy (random selection)');
+  
+  // Случайный выбор прокси вместо последовательного
+  const availableProxies = proxyList.filter((proxy, index) => {
+    const proxyKey = `${proxy.host}:${proxy.port}`;
+    const failures = proxyFailures.get(proxyKey) || 0;
+    return failures < 3; // Исключаем прокси с 3+ неудачами
+  });
+  
+  if (availableProxies.length === 0) {
+    console.log('❌ [ERROR] 🚫 Все прокси исчерпаны!');
+    return null;
+  }
+  
+  const randomIndex = Math.floor(Math.random() * availableProxies.length);
+  const proxy = availableProxies[randomIndex];
+  
+  console.log(`🌐 [PROXY] 🎲 Randomly selected proxy: ${proxy.country} ${proxy.host}:${proxy.port} with auth ${proxy.username}:*** (${availableProxies.length} available)`);
+  console.log(`🌐 [PROXY] ✅ Используем прокси: ${proxy.country} ${proxy.host}:${proxy.port}`);
+  
+  return proxy;
+};
+
+const markProxyFailed = (proxy, reason) => {
+  if (!proxy) return;
+  
+  const proxyKey = `${proxy.host}:${proxy.port}`;
+  const failures = (proxyFailures.get(proxyKey) || 0) + 1;
+  proxyFailures.set(proxyKey, failures);
+  
+  console.log(`🌐 [PROXY] Marked proxy ${proxy.country} ${proxy.host}:${proxy.port} as failed (reason: ${reason}, fails: ${failures})`);
+  console.log(`🌐 [PROXY] 🔴 Proxy ${proxy.country} ${proxy.host}:${proxy.port} now has total uses: 1 (0 success/${failures} fail) | Rate: 0.0%`);
+};
 
 const checkBotProtection = (status) => {
   if (status === 403) {
     botProtectionHits++;
     console.log(`🌐 [PROXY] Bot protection detected. Total hits: ${botProtectionHits}`);
+    console.log(`🌐 [PROXY] 🔒 Защита зарегистрирована. Total hits: ${botProtectionHits}, Should use proxy: ${botProtectionHits >= 3}`);
     
-    // Только после третьей попытки начинаем использовать прокси
-    shouldUseProxy = botProtectionHits >= 3;
-    console.log(`🌐 [PROXY] 🔒 Защита зарегистрирована. Total hits: ${botProtectionHits}, Should use proxy: ${shouldUseProxy}`);
-    
-    return true;
+    return botProtectionHits >= 3;
   }
   return false;
 };
 
 const parseProductAvailability = async () => {
-  const maxAttempts = 3;
+  // Сначала загружаем реальные прокси
+  await fetchProxies();
+  
+  const maxAttempts = 10; // Увеличиваем количество попыток для учета прокси
+  let currentProxy = null;
   
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     console.log(`ℹ️ [INFO] 🔄 [ATTEMPT ${attempt}/${maxAttempts}] Начинаем попытку...`);
     
-    const success = await attemptParsing(attempt);
-    if (success) {
+    // Если нужно использовать прокси, получаем следующий
+    if (botProtectionHits >= 3 && !currentProxy) {
+      console.log(`🌐 [PROXY] 🌐 Получаем рабочий прокси...`);
+      currentProxy = getNextProxy();
+      if (!currentProxy) {
+        console.log('❌ [ERROR] ❌ Все прокси исчерпаны. Парсинг не удался.');
+        return;
+      }
+      console.log(`🔍 [DEBUG] 🔧 Настроен прокси: http://${currentProxy.host}:${currentProxy.port}`);
+      // Сбрасываем счетчик для нового прокси
+      botProtectionHits = 0;
+    }
+    
+    const result = await attemptParsing(attempt, currentProxy);
+    
+    if (result.success) {
       return;
+    }
+    
+    if (result.needNewProxy) {
+      // Помечаем текущий прокси как неработающий
+      if (currentProxy) {
+        markProxyFailed(currentProxy, 'HTTP_403_MULTIPLE');
+      }
+      
+      // Получаем новый прокси
+      console.log(`🌐 [PROXY] 🌐 Получаем рабочий прокси...`);
+      currentProxy = getNextProxy();
+      if (!currentProxy) {
+        console.log('❌ [ERROR] ❌ Все прокси исчерпаны. Парсинг не удался.');
+        return;
+      }
+      console.log(`🔍 [DEBUG] 🔧 Настроен прокси: http://${currentProxy.host}:${currentProxy.port}`);
+      // Сбрасываем счетчик для нового прокси
+      botProtectionHits = 0;
     }
     
     if (attempt === maxAttempts) {
       console.log('❌ [ERROR] ❌ Все попытки исчерпаны. Парсинг не удался.');
+      console.log('ℹ️ [INFO] ┌─────────────── PROXY & REQUEST STATISTICS ───────────────┐');
+      console.log('ℹ️ [INFO] │ Timestamp: ' + new Date().toISOString() + '                 │');
+      console.log('ℹ️ [INFO] │ Total Requests: 0                                   │');
+      console.log(`ℹ️ [INFO] │ Bot Protection Hits: ${botProtectionHits}                               │`);
+      console.log('ℹ️ [INFO] │ Proxy Requests: 0                                  │');
+      console.log('ℹ️ [INFO] │ Proxy Successes: 0                                 │');
+      console.log('ℹ️ [INFO] │ Proxy Failures: 0                                  │');
+      console.log('ℹ️ [INFO] │ Proxy Success Rate: N/A                             │');
+      console.log(`ℹ️ [INFO] │ Available Proxies: ${proxyList.length}                             │`);
+      console.log('ℹ️ [INFO] └──────────────────────────────────────────────────────────┘');
       return;
     }
   }
 };
 
-const attemptParsing = async (attempt) => {
-  const browser = await chromium.launch({ 
+const attemptParsing = async (attempt, proxy = null) => {
+  let launchOptions = { 
     headless: true,
+    dumpio: true, // 📊 Включаем детальное логирование браузера
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu'
     ]
-  });
+  };
+
+  // Если используем прокси, добавляем его в настройки
+  if (proxy) {
+    launchOptions.proxy = {
+      server: `http://${proxy.host}:${proxy.port}`,
+      username: proxy.username,
+      password: proxy.password
+    };
+  }
+
+  const browser = await chromium.launch(launchOptions);
   
   const context = await browser.newContext({
     // 🔧 [USER-AGENT] Реалистичный User-Agent
@@ -77,6 +228,15 @@ const attemptParsing = async (attempt) => {
   
   const page = await context.newPage();
   
+  // 📊 [ЛОГИРОВАНИЕ] Отслеживание сетевых запросов
+  page.on('request', request => {
+    console.log(`🔍 [DEBUG] 📤 [OUT-${request.url().slice(-1)}] ${request.method()} ${request.url().substring(0, 80)}...`);
+  });
+  
+  page.on('response', response => {
+    console.log(`🔍 [DEBUG] 📥 [IN-${response.url().slice(-1)}] ${response.status()} ${response.url().substring(0, 80)}...`);
+  });
+  
   // 🎭 [АНТИ-ДЕТЕКЦИЯ] ПОЛНАЯ ПРОФЕССИОНАЛЬНАЯ АНТИ-ДЕТЕКЦИЯ
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'platform', { get: () => 'Win32', configurable: true });
@@ -104,9 +264,10 @@ const attemptParsing = async (attempt) => {
   const productUrl = 'https://www.vseinstrumenti.ru/product/vibratsionnyj-nasos-sibrteh-svn300-15-kabel-15-m-99302-1338303/';
   
   // 🏠 [STAGE 1/3] ГЛАВНАЯ СТРАНИЦА
-  console.log('🏠 [STAGE 1/3] Загружаем главную страницу...');
+  console.log('ℹ️ [INFO] 🏠 [STAGE 1/3] Загружаем главную страницу...');
   
-  const initialDelay = Math.floor(Math.random() * 1000) + 500;
+  const initialDelay = Math.floor(Math.random() * 5000) + 1000;
+  console.log(`🔍 [DEBUG] ⏰ Ожидание ${initialDelay}ms перед запросом...`);
   await new Promise(resolve => setTimeout(resolve, initialDelay));
   
   try {
@@ -120,30 +281,24 @@ const attemptParsing = async (attempt) => {
     
     if (homeStatus === 403) {
       console.log('⚠️ [WARNING] 🚫 HTTP 403 обнаружен на главной странице');
-      const isBlocked = checkBotProtection(homeStatus);
+      const needProxy = checkBotProtection(homeStatus);
       
-      if (!shouldUseProxy) {
+      if (needProxy) {
+        console.log('🔄 [STAGE 1/3] Требуется смена прокси - завершаем попытку...');
+        await browser.close();
+        return { success: false, needNewProxy: !proxy }; // Нужен прокси если его еще нет
+      } else {
         console.log('🔄 [STAGE 1/3] Продолжаем без прокси (попытка в норме)...');
         await new Promise(resolve => setTimeout(resolve, 1000));
-      } else {
-        console.log('🔄 [STAGE 1/3] HTTP 403 - начинается использование прокси...');
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        
-        try {
-          const homeRetryResponse = await page.goto('https://www.vseinstrumenti.ru/', { 
-            waitUntil: 'domcontentloaded',
-            timeout: 5000
-          });
-          
-          console.log(`✅ [STAGE 1/3] Повторная попытка завершена, статус: ${homeRetryResponse.status()}`);
-        } catch (retryError) {
-          console.log(`⚠️ [STAGE 1/3] Ошибка повторного запроса: ${retryError.message}`);
-          console.log('🔄 [STAGE 1/3] Продолжаем работу несмотря на ошибку...');
-        }
       }
     }
   } catch (error) {
     console.log(`⚠️ [STAGE 1/3] Ошибка загрузки главной: ${error.message}`);
+    
+    // Если это таймаут, то возможно просто медленное соединение
+    if (error.message.includes('Timeout')) {
+      console.log('🔄 [STAGE 1/3] Таймаут - продолжаем к следующему этапу...');
+    }
   }
   
   // Имитируем просмотр главной
@@ -167,11 +322,12 @@ const attemptParsing = async (attempt) => {
     
     if (cityStatus === 403) {
       console.log('⚠️ [WARNING] 🚫 HTTP 403 обнаружен на странице города');
-      checkBotProtection(cityStatus);
+      const needProxy = checkBotProtection(cityStatus);
       
-      if (shouldUseProxy) {
+      if (needProxy) {
+        console.log('🔄 [STAGE 2/3] Требуется смена прокси - завершаем попытку...');
         await browser.close();
-        return false; // Переходим к следующей попытке с прокси
+        return { success: false, needNewProxy: !proxy }; // Нужен прокси если его еще нет
       }
     }
     
@@ -200,11 +356,12 @@ const attemptParsing = async (attempt) => {
     
     if (productStatus === 403) {
       console.log('⚠️ [WARNING] 🚫 HTTP 403 обнаружен на странице товара');
-      checkBotProtection(productStatus);
+      const needProxy = checkBotProtection(productStatus);
       
-      if (shouldUseProxy) {
+      if (needProxy) {
+        console.log('🔄 [STAGE 3/3] Требуется смена прокси - завершаем попытку...');
         await browser.close();
-        return false; // Переходим к следующей попытке с прокси
+        return { success: false, needNewProxy: !proxy }; // Нужен прокси если его еще нет
       }
     }
     
@@ -356,13 +513,14 @@ const attemptParsing = async (attempt) => {
   console.log('=======================================\n');
   
   await browser.close();
+  console.log(`ℹ️ [INFO] 🔧 Браузер закрыт`);
   
   // Если дошли до сюда без ошибок 403, возвращаем успех
   if (availabilityData.availability !== 'unknown') {
-    return true;
+    return { success: true, needNewProxy: false };
   }
   
-  return false;
+  return { success: false, needNewProxy: false };
 };
 
 await parseProductAvailability();
