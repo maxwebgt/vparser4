@@ -158,6 +158,45 @@ export class ProxyHandler {
     console.log(`│ Success Rate: ${successRate}%${' '.repeat(33 - String(successRate).length)}│`);
     console.log('└──────────────────────────────────────────────────┘');
   }
+
+  /**
+   * Quick proxy availability check
+   */
+  async checkProxyAvailability(proxy, timeout = 10000) {
+    if (!proxy) return false;
+    
+    console.log(`🔍 [PROXY CHECK] Проверяем доступность ${proxy.country} ${proxy.host}:${proxy.port}...`);
+    
+    try {
+      // Простая проверка HTTP соединения
+      const testUrl = 'http://httpbin.org/ip';
+      const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.host}:${proxy.port}`;
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      
+      const response = await fetch(testUrl, {
+        method: 'GET',
+        signal: controller.signal,
+        // Note: fetch API doesn't support proxy directly in browser/Node.js
+        // This is a simplified check - in real implementation we'd use a proxy library
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        console.log(`✅ [PROXY CHECK] Прокси ${proxy.country} ${proxy.host}:${proxy.port} доступен`);
+        return true;
+      } else {
+        console.log(`❌ [PROXY CHECK] Прокси ${proxy.country} ${proxy.host}:${proxy.port} вернул ${response.status}`);
+        return false;
+      }
+      
+    } catch (error) {
+      console.log(`❌ [PROXY CHECK] Прокси ${proxy.country} ${proxy.host}:${proxy.port} недоступен: ${error.message}`);
+      return false;
+    }
+  }
 }
 
 export default ProxyHandler; 

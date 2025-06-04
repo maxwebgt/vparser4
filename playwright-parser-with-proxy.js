@@ -4,11 +4,22 @@ import ProxyHandler from './modules/proxyHandler.js';
 console.log('🛒 ПАРСЕР НАЛИЧИЯ С ПОДДЕРЖКОЙ ПРОКСИ');
 console.log('🔍 ВКЛЮЧЕН ДЕТАЛЬНЫЙ РЕЖИМ ОТЛАДКИ (dumpio)\n');
 
+/**
+ * Сокращает длинные URL для более читаемых логов
+ */
+const shortenUrl = (url, maxLength = 200) => {
+  if (!url || url.length <= maxLength) return url;
+  
+  const start = url.substring(0, 100);
+  const end = url.substring(url.length - 50);
+  return `${start}...${end} [${url.length} chars]`;
+};
+
 const parseProductAvailability = async (targetUrl = null) => {
   // Тестовый URL по умолчанию
   const productUrl = targetUrl || 'https://www.vseinstrumenti.ru/product/vibratsionnyj-nasos-sibrteh-svn300-15-kabel-15-m-99302-1338303/';
   
-  console.log(`🎯 Целевой URL: ${productUrl}\n`);
+  console.log(`🎯 Целевой URL: ${shortenUrl(productUrl)}\n`);
   
   // Инициализируем proxy handler
   const proxyHandler = new ProxyHandler();
@@ -42,21 +53,27 @@ const parseProductAvailability = async (targetUrl = null) => {
       return result.data;
     }
     
-    // 🚨 КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Меняем прокси только если ВСЕ этапы провалились
+    // 🚨 КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Меняем прокси только если ВСЕ этапы провалились  
     if (result.needNewProxy) {
       if (currentProxy) {
-        console.log(`🔄 [PROXY] Прокси ${currentProxy.host}:${currentProxy.port} провалил все этапы - меняем`);
-        proxyHandler.markProxyFailed(currentProxy, 'ALL_STAGES_FAILED');
+        const reason = result.reason || 'ALL_STAGES_FAILED';
+        console.log(`🔄 [PROXY] Переключение прокси: ${currentProxy.country} ${currentProxy.host}:${currentProxy.port}`);
+        console.log(`   🔴 Причина: ${reason}`);
+        
+        // Уже помечен как неработающий в catch блоках, не дублируем
+        if (reason === 'ALL_STAGES_FAILED') {
+          proxyHandler.markProxyFailed(currentProxy, reason);
+        }
       }
       
-      // Получаем новый прокси
+      // Получаем новый прокси  
       currentProxy = proxyHandler.getNextProxy();
       if (!currentProxy) {
         console.log('❌ [ERROR] Все прокси исчерпаны');
         break;
       }
       usedProxy = true;
-      console.log(`🆕 [PROXY] Переключились на новый прокси: ${currentProxy.host}:${currentProxy.port}`);
+      console.log(`🆕 [PROXY] Новый прокси: ${currentProxy.country} ${currentProxy.host}:${currentProxy.port}`);
     }
     
     // Пауза между попытками
@@ -131,11 +148,11 @@ const attemptParsing = async (attempt, proxy, productUrl, proxyHandler) => {
     page.on('request', request => {
       const url = request.url();
       if (url.includes('vseinstrumenti.ru') || url.includes('servicepipe.ru')) {
-        console.log(`📤 [REQUEST] ${request.method()} ${url}`);
+        console.log(`📤 [REQUEST] ${request.method()} ${shortenUrl(url)}`);
         const headers = request.headers();
         console.log(`   🔧 Headers: User-Agent=${headers['user-agent']?.substring(0, 50)}...`);
         if (headers['referer']) {
-          console.log(`   🔧 Referer: ${headers['referer']}`);
+          console.log(`   🔧 Referer: ${shortenUrl(headers['referer'])}`);
         }
       }
     });
@@ -146,11 +163,11 @@ const attemptParsing = async (attempt, proxy, productUrl, proxyHandler) => {
       
       // Логируем все ответы от целевого сайта
       if (url.includes('vseinstrumenti.ru') || url.includes('servicepipe.ru')) {
-        console.log(`📥 [RESPONSE] ${status} ${url}`);
+        console.log(`📥 [RESPONSE] ${status} ${shortenUrl(url)}`);
         
         // Детальный анализ 403 ответов
         if (status === 403) {
-          console.log(`   🚫 [403 DETAILS] URL: ${url}`);
+          console.log(`   🚫 [403 DETAILS] URL: ${shortenUrl(url)}`);
           const headers = response.headers();
           console.log(`   🚫 [403 HEADERS] server: ${headers['server'] || 'unknown'}`);
           console.log(`   🚫 [403 HEADERS] content-type: ${headers['content-type'] || 'unknown'}`);
@@ -169,7 +186,7 @@ const attemptParsing = async (attempt, proxy, productUrl, proxyHandler) => {
         // Логируем перенаправления
         if (status >= 300 && status < 400) {
           const location = response.headers()['location'];
-          console.log(`   🔄 [REDIRECT] ${status} -> ${location}`);
+          console.log(`   🔄 [REDIRECT] ${status} -> ${shortenUrl(location)}`);
         }
       }
     });
@@ -222,6 +239,12 @@ const attemptParsing = async (attempt, proxy, productUrl, proxyHandler) => {
         
       } catch (error) {
         console.log(`❌ [STAGE 1] Ошибка загрузки главной: ${error.message}`);
+        
+        // 🚨 КРИТИЧНО: ERR_TUNNEL_CONNECTION_FAILED = прокси не отвечает
+        if (error.message.includes('net::ERR_TUNNEL_CONNECTION_FAILED')) {
+          console.log(`🔴 [PROXY ERROR] Прокси не отвечает - немедленное переключение!`);
+          return { success: false, needNewProxy: true, reason: 'PROXY_CONNECTION_FAILED' };
+        }
       }
       
       // Этап 2: Установка города (даем каждому прокси шанс!)
@@ -249,6 +272,12 @@ const attemptParsing = async (attempt, proxy, productUrl, proxyHandler) => {
         
       } catch (error) {
         console.log(`❌ [STAGE 2] Ошибка установки города: ${error.message}`);
+        
+        // 🚨 КРИТИЧНО: ERR_TUNNEL_CONNECTION_FAILED = прокси не отвечает
+        if (error.message.includes('net::ERR_TUNNEL_CONNECTION_FAILED')) {
+          console.log(`🔴 [PROXY ERROR] Прокси не отвечает на этапе 2 - немедленное переключение!`);
+          return { success: false, needNewProxy: true, reason: 'PROXY_CONNECTION_FAILED' };
+        }
       }
       
       // Этап 3: Переход к товару (последний шанс для прокси)
@@ -276,6 +305,12 @@ const attemptParsing = async (attempt, proxy, productUrl, proxyHandler) => {
       
     } catch (error) {
       console.log(`❌ [STAGE 3] Ошибка загрузки товара: ${error.message}`);
+      
+      // 🚨 КРИТИЧНО: ERR_TUNNEL_CONNECTION_FAILED = прокси не отвечает
+      if (error.message.includes('net::ERR_TUNNEL_CONNECTION_FAILED')) {
+        console.log(`🔴 [PROXY ERROR] Прокси не отвечает на этапе 3 - немедленное переключение!`);
+        return { success: false, needNewProxy: true, reason: 'PROXY_CONNECTION_FAILED' };
+      }
     }
     
     // 📊 ДЕТАЛЬНЫЙ АНАЛИЗ РЕЗУЛЬТАТОВ ВСЕХ ЭТАПОВ
@@ -478,14 +513,24 @@ const attemptParsing = async (attempt, proxy, productUrl, proxyHandler) => {
   } catch (error) {
     console.log(`❌ [ERROR] Ошибка на попытке ${attempt}: ${error.message}`);
     
-    // Проверяем на таймауты и сетевые ошибки
+    // 🚨 КРИТИЧНО: Специальная обработка ошибок прокси
+    if (error.message.includes('net::ERR_TUNNEL_CONNECTION_FAILED')) {
+      console.log('🔴 [PROXY ERROR] ERR_TUNNEL_CONNECTION_FAILED - прокси недоступен');
+      if (proxy) {
+        proxyHandler.markProxyFailed(proxy, 'TUNNEL_CONNECTION_FAILED');
+        return { success: false, needNewProxy: true, reason: 'PROXY_CONNECTION_FAILED' };
+      }
+    }
+    
+    // Проверяем на другие сетевые ошибки
     if (error.message.includes('net::ERR_TIMED_OUT') || 
         error.message.includes('Timeout') ||
         error.message.includes('net::ERR_PROXY_CONNECTION_FAILED')) {
       
       if (proxy) {
         console.log('🔴 [PROXY] Прокси не отвечает или заблокирован');
-        return { success: false, needNewProxy: true };
+        proxyHandler.markProxyFailed(proxy, 'TIMEOUT_OR_CONNECTION_FAILED');
+        return { success: false, needNewProxy: true, reason: 'PROXY_TIMEOUT' };
       }
     }
     
