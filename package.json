@@ -10,6 +10,7 @@
     "test": "node test-network.js"
   },
   "dependencies": {
+    "node-fetch": "^3.3.2",
     "playwright": "^1.52.0"
   }
-} 
+}

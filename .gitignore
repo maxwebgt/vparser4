@@ -1,0 +1,217 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# nyc test coverage
+.nyc_output
+
+# Grunt intermediate storage (https://gruntjs.com/creating-plugins#storing-task-files)
+.grunt
+
+# Bower dependency directory (https://bower.io/)
+bower_components
+
+# node-waf configuration
+.lock-wscript
+
+# Compiled binary addons (https://nodejs.org/api/addons.html)
+build/Release
+
+# Dependency directories
+jspm_packages/
+
+# Snowpack dependency directory (https://snowpack.dev/)
+web_modules/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# Next.js build output
+.next
+
+# Nuxt.js build / generate output
+.nuxt
+dist
+
+# Gatsby files
+.cache/
+public
+
+# Storybook build outputs
+.out
+.storybook-out
+storybook-static
+
+# Temporary folders
+tmp/
+temp/
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+test-results.xml
+
+# Logs
+logs
+*.log
+log
+*.log.*
+combined.log
+error.log
+access.log
+
+# Screenshots and debugging
+screenshots/
+debug-*.png
+debug-*.jpg
+*.screenshot.png
+error-*.png
+
+# Runtime data and crashes
+crash.log
+*-crash.log
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.tmp
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Docker
+.dockerignore
+
+# Database files (if any)
+*.db
+*.sqlite
+*.sqlite3
+
+# Sensitive data and credentials
+config/local.json
+config/production.json
+credentials.json
+*.key
+*.pem
+*.crt
+*.p12
+
+# API keys and secrets (даже если в коде, лучше не коммитить)
+secrets/
+.secrets
+api-keys.txt
+proxy-credentials.txt
+
+# Parser specific files
+parsed-data/
+scraped-data/
+output/
+exports/
+data/
+
+# Error tracking
+errors/
+failed-urls.txt
+blocked-urls.txt
+
+# Monitoring and metrics
+metrics/
+stats/
+performance.json
+
+# Playwright browsers (если устанавливаются локально)
+browsers/
+
+# Build artifacts
+build/
+dist/
+
+# PM2 process manager
+.pm2/
+
+# Serverless directories
+.serverless/
+
+# FuseBox cache
+.fusebox/
+
+# DynamoDB Local files
+.dynamodb/
+
+# TernJS port file
+.tern-port
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+
+# Yarn v2
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
