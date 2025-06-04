@@ -18,6 +18,9 @@ COPY playwright-parser.js ./
 COPY optimized-warmup.js ./
 COPY test-network.js ./
 
+# Копируем модули прокси (КРИТИЧНО для работы!)
+COPY modules/ ./modules/
+
 # Создаем пользователя для безопасности
 RUN groupadd -r playwright && useradd -r -g playwright -G audio,video playwright \
     && mkdir -p /home/playwright/Downloads \
