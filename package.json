@@ -3,10 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Парсер наличия товаров",
-  "main": "playwright-parser.js",
+  "main": "playwright-parser-with-proxy",
   "scripts": {
-    "start": "node playwright-parser.js",
-    "puppeteer": "node optimized-warmup.js"
+    "start": "node playwright-parser-with-proxy"
   },
   "dependencies": {
     "playwright": "^1.52.0"

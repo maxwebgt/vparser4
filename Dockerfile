@@ -10,8 +10,9 @@ COPY package*.json ./
 # Устанавливаем зависимости
 RUN npm install
 
-# Копируем скрипты
-COPY playwright-parser.js ./
+# Копируем скрипты и модули
+COPY playwright-parser-with-proxy.js ./
+COPY modules/ ./modules/
 
 # Создаем пользователя для безопасности
 RUN groupadd -r playwright && useradd -r -g playwright -G audio,video playwright \
