@@ -1,0 +1,14 @@
+{
+  "name": "parser-docker",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Парсер наличия товаров",
+  "main": "playwright-parser.js",
+  "scripts": {
+    "start": "node playwright-parser.js",
+    "puppeteer": "node optimized-warmup.js"
+  },
+  "dependencies": {
+    "playwright": "^1.52.0"
+  }
+} 

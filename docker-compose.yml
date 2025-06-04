@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  # Playwright версия (по умолчанию)
+  parser:
+    build: .
+    container_name: playwright-parser
+    environment:
+      - NODE_ENV=production
+    # Контейнер завершится после выполнения скрипта
+    restart: "no"
+    # Ограничения ресурсов
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M 
