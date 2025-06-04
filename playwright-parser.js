@@ -5,6 +5,7 @@ console.log('🛒 ЭФФЕКТИВНЫЙ ПАРСЕР НАЛИЧИЯ: Playwright
 const parseProductAvailability = async () => {
   const browser = await chromium.launch({ 
     headless: true,
+    slowMo: 100, // Замедляем для VDS
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -17,16 +18,33 @@ const parseProductAvailability = async () => {
       '--disable-background-timer-throttling',
       '--disable-backgrounding-occluded-windows',
       '--disable-renderer-backgrounding',
-      '--disable-ipc-flooding-protection'
+      '--disable-ipc-flooding-protection',
+      '--disable-blink-features=AutomationControlled'
     ]
   });
   
+  // Рандомизируем User-Agent для VDS
+  const userAgents = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36'
+  ];
+  const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
+  
   const context = await browser.newContext({
-    // 🔧 [USER-AGENT] Реалистичный User-Agent
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+    // 🔧 [USER-AGENT] Рандомный реалистичный User-Agent
+    userAgent: randomUA,
     
-    // 🖥️ [VIEWPORT] Реалистичный viewport
-    viewport: { width: 1920, height: 1080 },
+    // 🖥️ [VIEWPORT] Рандомный реалистичный viewport
+    viewport: { 
+      width: 1920 + Math.floor(Math.random() * 100), 
+      height: 1080 + Math.floor(Math.random() * 100) 
+    },
+    
+    // 🌐 [LOCALE] Локализация
+    locale: 'ru-RU',
+    timezoneId: 'Europe/Moscow',
     
     // 📋 [HEADERS] Критически важные заголовки
     extraHTTPHeaders: {
@@ -49,8 +67,28 @@ const parseProductAvailability = async () => {
   
   const page = await context.newPage();
   
-  // 🎭 [АНТИ-ДЕТЕКЦИЯ] ПОЛНАЯ ПРОФЕССИОНАЛЬНАЯ АНТИ-ДЕТЕКЦИЯ
+  // 🔧 [NETWORK LOGGING] Перехватываем все сетевые запросы для диагностики
+  page.on('request', request => {
+    console.log('🌐 [REQUEST]', request.method(), request.url(), 'Headers:', JSON.stringify(request.headers(), null, 2));
+  });
+  
+  page.on('response', response => {
+    console.log('📡 [RESPONSE]', response.status(), response.url(), 'Headers:', JSON.stringify(response.headers(), null, 2));
+  });
+  
+  page.on('requestfailed', request => {
+    console.log('❌ [REQUEST FAILED]', request.url(), request.failure().errorText);
+  });
+  
+  // 🎭 [АНТИ-ДЕТЕКЦИЯ] МАКСИМАЛЬНО АГРЕССИВНАЯ АНТИ-ДЕТЕКЦИЯ ДЛЯ VDS
   await page.addInitScript(() => {
+    // Удаляем все признаки webdriver
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined, configurable: true });
+    delete navigator.__proto__.webdriver;
+    delete navigator.webdriver;
+    delete window.navigator.webdriver;
+    
+    // Переопределяем платформу и экран
     Object.defineProperty(navigator, 'platform', { get: () => 'Win32', configurable: true });
     Object.defineProperty(screen, 'width', { get: () => 1920, configurable: true });
     Object.defineProperty(screen, 'height', { get: () => 1080, configurable: true });
@@ -59,18 +97,51 @@ const parseProductAvailability = async () => {
     Object.defineProperty(screen, 'colorDepth', { get: () => 24, configurable: true });
     Object.defineProperty(screen, 'pixelDepth', { get: () => 24, configurable: true });
     
-    Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
-    delete navigator.__proto__.webdriver;
-    
+    // Язык и локаль
     Object.defineProperty(navigator, 'language', { get: () => 'ru-RU', configurable: true });
     Object.defineProperty(navigator, 'languages', { get: () => ['ru-RU', 'ru', 'en-US', 'en'], configurable: true });
     
-    window.navigator.webdriver = false;
-    delete window.navigator.webdriver;
+    // Удаляем selenium признаки
+    delete window.document.$cdc_asdjflasutopfhvcZLmcfl_;
+    delete window.$chrome_asyncScriptInfo;
+    delete window.__$webdriverAsyncExecutor;
+    delete window.__webdriver_script_fn;
+    delete window.__selenium_unwrapped;
+    delete window.__webdriver_unwrapped;
+    
+    // Переопределяем plugins
+    Object.defineProperty(navigator, 'plugins', {
+      get: () => [
+        { 0: { type: "application/x-google-chrome-pdf", suffixes: "pdf", description: "Portable Document Format", filename: "internal-pdf-viewer" } },
+        { 1: { type: "application/pdf", suffixes: "pdf", description: "Portable Document Format", filename: "mhjfbmdgcfjbbpaeojofohoefgiehjai" } }
+      ]
+    });
+    
+    // Маскируем chrome runtime
+    if (window.chrome) {
+      Object.defineProperty(window.chrome, 'runtime', {
+        get: () => ({ onConnect: undefined, onMessage: undefined })
+      });
+    }
+    
+    // Удаляем webdriver атрибут из DOM
+    const originalQuery = document.querySelector;
+    document.querySelector = function(selector) {
+      if (selector === '[webdriver]') return null;
+      return originalQuery.call(document, selector);
+    };
     
     if (document.documentElement) {
       document.documentElement.removeAttribute('webdriver');
     }
+    
+    // Переопределяем permission API
+    const originalQuery2 = navigator.permissions.query;
+    navigator.permissions.query = (parameters) => (
+      parameters.name === 'notifications' ?
+        Promise.resolve({ state: Notification.permission }) :
+        originalQuery2(parameters)
+    );
   });
   
   const productUrl = 'https://www.vseinstrumenti.ru/product/vibratsionnyj-nasos-sibrteh-svn300-15-kabel-15-m-99302-1338303/';
@@ -80,7 +151,9 @@ const parseProductAvailability = async () => {
   console.log('🔧 [DEBUG] User-Agent:', await page.evaluate(() => navigator.userAgent));
   console.log('🔧 [DEBUG] Viewport:', await page.viewportSize());
   
-  const initialDelay = Math.floor(Math.random() * 1000) + 500;
+  // Большая случайная задержка для VDS
+  const initialDelay = Math.floor(Math.random() * 3000) + 2000; // 2-5 секунд
+  console.log(`🔧 [DEBUG] Waiting ${initialDelay}ms before first request...`);
   await new Promise(resolve => setTimeout(resolve, initialDelay));
   
   try {
@@ -100,9 +173,22 @@ const parseProductAvailability = async () => {
     const bodyText = await page.evaluate(() => document.body ? document.body.innerText.substring(0, 200) : 'BODY НЕ НАЙДЕН');
     console.log('🔧 [DEBUG] Body preview:', bodyText);
     
-    if (homeStatus === 403) {
-      console.log('🔄 [STAGE 1/3] HTTP 403 - начинается прогрев прокси...');
-      await new Promise(resolve => setTimeout(resolve, 3000));
+    // КРИТИЧЕСКИ ВАЖНО: логируем HTML содержимое
+    const htmlContent = await page.content();
+    console.log('🔧 [DEBUG] HTML content length:', htmlContent.length);
+    console.log('🔧 [DEBUG] HTML preview:', htmlContent.substring(0, 500));
+    
+    // Проверяем есть ли капча или блокировка
+    const hasCloudflare = htmlContent.includes('cloudflare') || htmlContent.includes('Cloudflare');
+    const hasBlock = htmlContent.includes('блокирован') || htmlContent.includes('заблокирован') || htmlContent.includes('blocked');
+    const hasCaptcha = htmlContent.includes('captcha') || htmlContent.includes('Captcha');
+    console.log('🔧 [DEBUG] Security check:', { hasCloudflare, hasBlock, hasCaptcha });
+    
+          if (homeStatus === 403) {
+        console.log('🔄 [STAGE 1/3] HTTP 403 - начинается прогрев прокси...');
+        const retryDelay = Math.floor(Math.random() * 5000) + 5000; // 5-10 секунд
+        console.log(`🔧 [DEBUG] Waiting ${retryDelay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
       
       try {
         const homeRetryResponse = await page.goto('https://www.vseinstrumenti.ru/', { 
@@ -121,10 +207,22 @@ const parseProductAvailability = async () => {
     console.log(`⚠️ [STAGE 1/3] Ошибка загрузки главной: ${error.message}`);
   }
   
-  // Имитируем просмотр главной
-  await new Promise(resolve => setTimeout(resolve, 1500));
-  await page.mouse.move(500, 300);
-  await new Promise(resolve => setTimeout(resolve, 800));
+  // Имитируем РЕАЛЬНОГО человека на главной странице
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  // Случайные движения мыши
+  for (let i = 0; i < 3; i++) {
+    const x = Math.floor(Math.random() * 1000) + 100;
+    const y = Math.floor(Math.random() * 500) + 100;
+    await page.mouse.move(x, y);
+    await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500));
+  }
+  
+  // Скроллинг как человек
+  await page.mouse.wheel(0, Math.floor(Math.random() * 500) + 200);
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  await page.mouse.wheel(0, -Math.floor(Math.random() * 300) + 100);
+  await new Promise(resolve => setTimeout(resolve, 1000));
   
   // 🏙️ [STAGE 2/3] УСТАНОВКА ГОРОДА
   console.log('🏙️ [STAGE 2/3] Устанавливаем город...');
@@ -168,6 +266,17 @@ const parseProductAvailability = async () => {
     
     const productBody = await page.evaluate(() => document.body ? document.body.innerText.substring(0, 300) : 'BODY НЕ НАЙДЕН');
     console.log('🔧 [DEBUG] Product body preview:', productBody);
+    
+    // КРИТИЧЕСКИ ВАЖНО: логируем HTML содержимое товара
+    const productHtml = await page.content();
+    console.log('🔧 [DEBUG] Product HTML content length:', productHtml.length);
+    console.log('🔧 [DEBUG] Product HTML preview:', productHtml.substring(0, 500));
+    
+    // Проверяем блокировку на странице товара
+    const productHasCloudflare = productHtml.includes('cloudflare') || productHtml.includes('Cloudflare');
+    const productHasBlock = productHtml.includes('блокирован') || productHtml.includes('заблокирован') || productHtml.includes('blocked');
+    const productHasCaptcha = productHtml.includes('captcha') || productHtml.includes('Captcha');
+    console.log('🔧 [DEBUG] Product security check:', { productHasCloudflare, productHasBlock, productHasCaptcha });
     
     productSuccess = true;
   } catch (productError) {
