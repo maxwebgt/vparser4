@@ -9,7 +9,15 @@ const parseProductAvailability = async () => {
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
-      '--disable-gpu'
+      '--disable-gpu',
+      '--disable-web-security',
+      '--disable-features=VizDisplayCompositor',
+      '--no-first-run',
+      '--disable-extensions',
+      '--disable-background-timer-throttling',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding',
+      '--disable-ipc-flooding-protection'
     ]
   });
   
@@ -69,6 +77,8 @@ const parseProductAvailability = async () => {
   
   // 🏠 [STAGE 1/3] ГЛАВНАЯ СТРАНИЦА
   console.log('🏠 [STAGE 1/3] Загружаем главную страницу...');
+  console.log('🔧 [DEBUG] User-Agent:', await page.evaluate(() => navigator.userAgent));
+  console.log('🔧 [DEBUG] Viewport:', await page.viewportSize());
   
   const initialDelay = Math.floor(Math.random() * 1000) + 500;
   await new Promise(resolve => setTimeout(resolve, initialDelay));
@@ -76,11 +86,19 @@ const parseProductAvailability = async () => {
   try {
     const homeResponse = await page.goto('https://www.vseinstrumenti.ru/', { 
       waitUntil: 'domcontentloaded',
-      timeout: 5000
+      timeout: 10000
     });
     
     const homeStatus = homeResponse.status();
     console.log(`✅ [STAGE 1/3] Главная загружена, статус: ${homeStatus}`);
+    console.log('🔧 [DEBUG] Response headers:', homeResponse.headers());
+    
+    // Логируем содержимое страницы
+    const pageTitle = await page.title();
+    console.log('🔧 [DEBUG] Page title:', pageTitle);
+    
+    const bodyText = await page.evaluate(() => document.body ? document.body.innerText.substring(0, 200) : 'BODY НЕ НАЙДЕН');
+    console.log('🔧 [DEBUG] Body preview:', bodyText);
     
     if (homeStatus === 403) {
       console.log('🔄 [STAGE 1/3] HTTP 403 - начинается прогрев прокси...');
@@ -89,10 +107,11 @@ const parseProductAvailability = async () => {
       try {
         const homeRetryResponse = await page.goto('https://www.vseinstrumenti.ru/', { 
           waitUntil: 'domcontentloaded',
-          timeout: 5000
+          timeout: 10000
         });
         
         console.log(`✅ [STAGE 1/3] Прогрев завершен, статус: ${homeRetryResponse.status()}`);
+        console.log('🔧 [DEBUG] Retry headers:', homeRetryResponse.headers());
       } catch (retryError) {
         console.log(`⚠️ [STAGE 1/3] Ошибка повторного запроса: ${retryError.message}`);
         console.log('🔄 [STAGE 1/3] Продолжаем работу несмотря на ошибку...');
@@ -115,10 +134,11 @@ const parseProductAvailability = async () => {
     const cityUrl = 'https://www.vseinstrumenti.ru/represent/change/?represent_id=1';
     const cityResponse = await page.goto(cityUrl, { 
       waitUntil: 'domcontentloaded',
-      timeout: 5000
+      timeout: 10000
     });
     
     console.log(`✅ [STAGE 2/3] Город установлен, статус: ${cityResponse.status()}`);
+    console.log('🔧 [DEBUG] City headers:', cityResponse.headers());
     citySuccess = true;
   } catch (cityError) {
     console.log(`⚠️ [STAGE 2/3] Ошибка установки города: ${cityError.message}`);
@@ -136,10 +156,19 @@ const parseProductAvailability = async () => {
   try {
     const productResponse = await page.goto(productUrl, { 
       waitUntil: 'domcontentloaded',
-      timeout: 5000
+      timeout: 10000
     });
     
     console.log(`✅ [STAGE 3/3] Товар загружен, статус: ${productResponse.status()}`);
+    console.log('🔧 [DEBUG] Product headers:', productResponse.headers());
+    
+    // Логируем содержимое страницы товара
+    const productTitle = await page.title();
+    console.log('🔧 [DEBUG] Product page title:', productTitle);
+    
+    const productBody = await page.evaluate(() => document.body ? document.body.innerText.substring(0, 300) : 'BODY НЕ НАЙДЕН');
+    console.log('🔧 [DEBUG] Product body preview:', productBody);
+    
     productSuccess = true;
   } catch (productError) {
     console.log(`⚠️ [STAGE 3/3] Ошибка загрузки товара: ${productError.message}`);
@@ -150,10 +179,19 @@ const parseProductAvailability = async () => {
     try {
       const directResponse = await page.goto(productUrl, { 
         waitUntil: 'networkidle',
-        timeout: 5000
+        timeout: 10000
       });
       
       console.log(`✅ [FALLBACK] Прямой переход успешен, статус: ${directResponse.status()}`);
+      console.log('🔧 [DEBUG] Direct headers:', directResponse.headers());
+      
+      // Логируем содержимое после прямого перехода
+      const directTitle = await page.title();
+      console.log('🔧 [DEBUG] Direct page title:', directTitle);
+      
+      const directBody = await page.evaluate(() => document.body ? document.body.innerText.substring(0, 300) : 'BODY НЕ НАЙДЕН');
+      console.log('🔧 [DEBUG] Direct body preview:', directBody);
+      
       productSuccess = true;
     } catch (directError) {
       console.log(`❌ [FALLBACK] Прямой переход тоже не работает: ${directError.message}`);
@@ -166,6 +204,32 @@ const parseProductAvailability = async () => {
   
   // Минимальное ожидание для загрузки контента
   await new Promise(resolve => setTimeout(resolve, 1000));
+  
+  // Диагностика текущей страницы
+  const currentUrl = page.url();
+  const currentTitle = await page.title();
+  console.log('🔧 [DEBUG] Current URL:', currentUrl);
+  console.log('🔧 [DEBUG] Current title:', currentTitle);
+  
+  // Проверяем есть ли хоть какой-то контент
+  const hasContent = await page.evaluate(() => {
+    return {
+      bodyExists: !!document.body,
+      bodyLength: document.body ? document.body.innerText.length : 0,
+      hasButtons: document.querySelectorAll('button').length,
+      hasLinks: document.querySelectorAll('a').length,
+      hasText: document.body ? document.body.innerText.substring(0, 100) : 'НЕТ BODY'
+    };
+  });
+  console.log('🔧 [DEBUG] Content check:', hasContent);
+  
+  // Делаем скриншот для отладки (если нужно)
+  try {
+    await page.screenshot({ path: '/tmp/debug-page.png', fullPage: false });
+    console.log('🔧 [DEBUG] Screenshot saved to /tmp/debug-page.png');
+  } catch (screenshotError) {
+    console.log('🔧 [DEBUG] Screenshot failed:', screenshotError.message);
+  }
   
   const availabilityData = await page.evaluate(() => {
     const data = {};

@@ -15,6 +15,9 @@
 # Запуск Playwright версии (по умолчанию)
 docker-compose up --build
 
+# Тестирование сети (для отладки VDS)
+docker-compose run --rm parser npm run test
+
 # Локальный запуск Playwright версии
 npm install
 npm start

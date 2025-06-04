@@ -6,7 +6,8 @@
   "main": "playwright-parser.js",
   "scripts": {
     "start": "node playwright-parser.js",
-    "puppeteer": "node optimized-warmup.js"
+    "puppeteer": "node optimized-warmup.js",
+    "test": "node test-network.js"
   },
   "dependencies": {
     "playwright": "^1.52.0"
